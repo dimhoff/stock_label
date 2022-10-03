@@ -1,0 +1,244 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Stock Mapping</title>
+  <!--
+Copyright (c) 2022 David Imhoff <dimhoff.devel <at> gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+  -->
+  <!--script src="https://cozmo.github.io/jsQR/jsQR.js"></script-->
+  <script src="./jsQR.js"></script>
+  <style>
+/* From camera example */
+    body {
+      max-width: 640px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    #loadingMessage {
+      text-align: center;
+      padding: 40px;
+      background-color: #eee;
+    }
+
+    #canvas {
+      width: 100%;
+    }
+
+    #output {
+      /*margin-top: 20px;*/
+      background: #eee;
+      padding: 10px;
+      padding-bottom: 0;
+    }
+
+    #output div {
+      padding-bottom: 10px;
+      word-wrap: break-word;
+    }
+
+/* My Own elements */
+#tblParts {
+  width: 100%;
+}
+/*#tblParts th:nth-of-type(2) {
+  width: 100%;
+}
+*/
+#tblParts td {
+  padding: 0 10px;
+}
+
+#txtOutput {
+  width:100%;
+  height: 50px;
+}
+  </style>
+</head>
+<body>
+
+<div id="viewScan" class="view">
+  <div id="loadingMessage">🎥 Unable to access video stream (please make sure you have a webcam enabled)</div>
+  <canvas id="canvas" hidden></canvas>
+  <div id="output" hidden>
+    <div id="outputMessage">No QR code detected.</div>
+    <div hidden><b>Data:</b> <span id="outputData"></span>
+    <button id="btnRestartScan" type="button">Continue</button>
+    </div>
+  </div>
+  Location<input id="inpLocation" name="location" type="text" required autofocus></input><br>
+
+  <textarea id="txtOutput"></textarea>
+  <!--table id="tblParts">
+    <thead>
+      <tr>
+        <th>Part</th>
+        <th>Location</th>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table--!>
+</div>
+
+<script>
+
+var video = document.createElement("video");
+var canvasElement = document.getElementById("canvas");
+var canvas = canvasElement.getContext("2d");
+var loadingMessage = document.getElementById("loadingMessage");
+var outputContainer = document.getElementById("output");
+var outputMessage = document.getElementById("outputMessage");
+var outputData = document.getElementById("outputData");
+
+function drawLine(begin, end, color) {
+  canvas.beginPath();
+  canvas.moveTo(begin.x, begin.y);
+  canvas.lineTo(end.x, end.y);
+  canvas.lineWidth = 4;
+  canvas.strokeStyle = color;
+  canvas.stroke();
+}
+
+// Use facingMode: environment to attemt to get the front camera on phones
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: "environment" }
+}).then(function(stream) {
+  video.srcObject = stream;
+  video.setAttribute("playsinline", true); // required to tell iOS safari we don't want fullscreen
+  video.play();
+  requestAnimationFrame(tick);
+});
+
+function tick() {
+  loadingMessage.innerText = "⌛ Loading video..."
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    loadingMessage.hidden = true;
+    canvasElement.hidden = false;
+    outputContainer.hidden = false;
+
+    canvasElement.height = video.videoHeight;
+    canvasElement.width = video.videoWidth;
+    canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+    var imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+    var code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
+    if (code) {
+      drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#FF3B58");
+      drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#FF3B58");
+      drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#FF3B58");
+      drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#FF3B58");
+      outputMessage.hidden = true;
+      outputData.parentElement.hidden = false;
+      outputData.innerText = code.data;
+
+      handleQrCode(code);
+    } else {
+      outputMessage.hidden = false;
+      outputData.parentElement.hidden = true;
+
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+var partLocations = {};
+
+/*
+function fillInventoryTable() {
+  let newBody = document.createElement('TBODY');
+  for (let item of inventory) {
+    const newRow = newBody.insertRow(-1);
+    let cell = null;
+
+    cell = newRow.insertCell(-1);
+    cell.innerText = item.id;
+
+    cell = newRow.insertCell(-1);
+    cell.innerText = item.description;
+
+    cell = newRow.insertCell(-1);
+  }
+
+  const table = document.getElementById("tblParts");
+  table.replaceChild(newBody, table.tBodies[0]);
+}
+*/
+
+const PO_CODE_LENGTH = (3 + 5 + 8 + 1);
+
+function handleQrCode(codeObj) {
+  let code = codeObj.data.toString();
+
+  if (! code.startsWith('661') || code.length != PO_CODE_LENGTH) {
+    console.log("QR-code does not seem to be a Part-PO tag: " + code);
+    return;
+  }
+
+  const partNo = parseInt(code.substr(3, 5));
+  const poNo = parseInt(code.substr(3 + 5, 8));
+  const checkDigit = parseInt(code.substr(3 + 5 + 8));
+
+  console.log(`Found QR-code for part: ${partNo} from PO: ${poNo}`);
+
+  // calculate checksum
+  let checksum = 0;
+  for (i = 0; i < code.length - 1; i++) {
+    chr = code.charCodeAt(i);
+    checksum = checksum + chr;
+  }
+  checksum = checksum % 10;
+
+  const locationEl = document.getElementById('inpLocation');
+  if (checkDigit != checksum) {
+    console.log("Invalid checksum: " + code);
+    return;
+  } else if (partNo == 99999) {
+    // Shelf identifier
+    locationEl.value = poNo / 10
+  } else {
+    addPart(partNo, locationEl.value);
+  }
+}
+
+function addPart(partNo, location) {
+  if (partNo in partLocations) return;
+
+  partLocations[partNo] = location;
+
+  const outEl = document.getElementById('txtOutput');
+  outEl.value = `P${partNo}, ${location}\n` + outEl.value;
+  /*
+  const table = document.getElementById("tblParts");
+  const tbody = table.tBodies[0];
+
+  const newRow = tbody.insertRow(0);
+  let cell = null;
+
+  cell = newRow.insertCell(-1);
+  cell.innerText = 'P' + partNo;
+
+  cell = newRow.insertCell(-1);
+  cell.innerText = location;
+  */
+}
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+  <title>Storage Label Generator</title>
+  <!--
+Copyright (c) 2022 David Imhoff <dimhoff.devel <at> gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  -->
+  
+  <script type="text/javascript" src="qrcode.js"></script>
+  <!--script type="text/javascript" src="https://kazuhikoarase.github.io/qrcode-generator/js/qrcode.js"></script-->
+  <script type="text/javascript" src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
+
+  <style type="text/css">
+body {
+  margin: 0;
+}
+#controls {
+  padding: 5px;
+  background: whitesmoke;
+  border-bottom: 1px solid black;
+  margin-bottom: 15px;
+/*  box-shadow: 0 0 15px 5px #ccc;*/
+  position: sticky;
+  top: 0;
+  z-index: 10000;
+}
+
+/*** Yellow Container ***/
+.etiquetteTypeYellowBox {
+  width: 147mm;
+  height: 24mm;
+  display: grid;
+  grid-template-columns: 1fr 1fr 80px;
+  grid-template-rows: 6mm 14mm;
+  overflow: hidden;
+  padding: 2mm 0px 1mm 0px;
+  box-sizing: border-box;
+}
+.etiquetteTypeYellowBox .partNoContainer {
+  grid-column: 2 / 3;
+  line-height: 6mm;
+}
+.etiquetteTypeYellowBox .poContainer {
+  grid-column: 1 / 2;
+  line-height: 6mm;
+}
+.etiquetteTypeYellowBox .qrCodeContainer {
+  grid-column: 3 / 4;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+.etiquetteTypeYellowBox .titleContainer {
+  grid-column: 1 / 3;
+  grid-row: 2 / 3;
+  overflow: hidden;
+}
+
+/*** Magnet Stripe ***/
+.etiquetteTypeMagnetStripe {
+  min-width: 80mm;
+  height: 27mm;
+  display: grid;
+  grid-template-columns: 1fr 1fr 80px;
+  grid-template-rows: 6mm 14mm;
+  overflow: hidden;
+  padding: 4mm 0px 2mm 0px;
+  box-sizing: border-box;
+}
+.etiquetteTypeMagnetStripe .qrCodeContainer {
+  grid-column: 3 / 4;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+.etiquetteTypeMagnetStripe .partNoContainer {
+  grid-column: 2 / 3;
+  line-height: 6mm;
+}
+.etiquetteTypeMagnetStripe .poContainer {
+  grid-column: 1 / 2;
+  line-height: 6mm;
+}
+.etiquetteTypeMagnetStripe .titleContainer {
+  grid-column: 1 / 3;
+  grid-row: 2 / 3;
+  overflow: hidden;
+}
+
+/*** Big Drawer ***/
+.etiquetteTypeBigDrawer {
+  /* optimum, but doesn't allow for two label next to each other on one page: width: 96mm; */
+  width: 94.4mm;
+  height: 34mm;
+}
+.etiquetteTypeBigDrawer .qrCodeContainer {
+  display: none;
+}
+.etiquetteTypeBigDrawer .partNoContainer {
+  height: 8.75mm;
+  padding-right: 10mm;
+}
+.etiquetteTypeBigDrawer .poContainer {
+  height: 8.75mm;
+}
+.etiquetteTypeBigDrawer .titleContainer {
+  height: 17.5mm;
+  overflow: hidden;
+  font-size: 18px;
+  margin: 0 3mm;
+}
+
+/*** Small Drawer ***/
+.etiquetteTypeSmallDrawer {
+  width: 40mm;
+  height: 35mm;
+}
+.etiquetteTypeSmallDrawer .qrCodeContainer {
+  display: none;
+}
+.etiquetteTypeSmallDrawer .partNoContainer {
+  height: 8.75mm;
+  padding-right: 10mm;
+}
+.etiquetteTypeSmallDrawer .poContainer {
+  height: 8.75mm;
+}
+.etiquetteTypeSmallDrawer .titleContainer {
+  height: 17.5mm;
+  overflow: hidden;
+  font-size: 12px;
+  margin: 0 3mm;
+}
+
+/*** import/software error ***/
+.etiquetteTypeundefined {
+  background: red;
+}
+
+/* Generic stuff */
+.etiquetteContainer {
+  border: 1px solid black;
+  border-collapse: collapse;
+  position: relative; /* Make a positioned object so we can position child absolute relative to this container. */
+  font-size: 20px;
+  margin: 0mm;
+}
+.etiquetteControls {
+  display: none;
+  position: absolute;
+  top: 0;
+}
+.etiquetteContainer:hover .etiquetteControls{
+  display: block;
+}
+
+.poContainer {
+  /*width: 9cm;*/
+  vertical-align: bottom;
+  padding-left: 10px;
+}
+.partNoContainer {
+  vertical-align: bottom;
+  text-align: right;
+}
+.qrCodeContainer {
+  width: 1px;
+  padding-left: 10px
+}
+.titleContainer {
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  /*overflow: hidden;*/
+  word-break: break-word;
+}
+.page {
+  width: 190mm;
+  height: 277mm;
+  display: flex;
+  flex-flow: row wrap;
+  justify-content: flex-start;
+  align-content: flex-start;
+  overflow: hidden;
+  page-break-inside: avoid;
+  page-break-after: always;
+}
+@media screen {
+  .page {
+    border: 1px solid lightgrey;
+    margin: 30px;
+    box-shadow: 0 0 15px 5px #ccc;
+  }
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm 10mm;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  .noPrint {
+    display: none;
+  }
+}
+
+#divCopyright {
+  position: fixed;
+  bottom: 0px;
+  right: 0px;
+  margin: 5px;
+  z-index: 10000;
+  border-radius: 5px;
+
+  font-family: "Lucida Console", "Courier New", monospace;
+
+  /* Only show the copyright symbol at first, show rest on hover */
+  width: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: all 1s ease-in;
+}
+#divCopyright:hover {
+  width: 60ch;
+  background-color: white;
+}
+
+  </style>
+</head>
+<body>
+<div id="divCopyright" class="noPrint">
+  &copy;
+  <span id="spnCopyrightText">
+    Copyright 2022 David Imhoff |
+    License: <a href="https://en.wikipedia.org/wiki/ISC_license" target="_blank">ISC</a> |
+    Version: 0.3
+  </span>
+</div>
+
+<div id="controls" class="noPrint">
+  <form id="frmAddLabel">
+    <label>AFAS#<input id="inpPartNo" type="number" min='0' max='99999' required autofocus /></label>
+    <label>Title<input id="inpPartTitle" type="text" required />
+    <!--textarea id="inpPartTitle" required></textarea--></label>
+    <label>PO #<input id="inpPoNumber" type="number" min='1' max='99999999' /></label>
+    <label>
+      Label Type:
+      <select id="selEtiquetteType">
+        <option value="YellowBox" default>Yellow Box</option>
+        <option value="MagnetStripe">Magnet Stripe</option>
+        <option value="SmallDrawer">Small Drawer</option>
+        <option value="BigDrawer">Big Drawer</option>
+      </select>
+    </label>
+    <button id="btnAdd">Add</button>
+  </form>
+  <button id="btnImport">Import...</button><input id="inpCsvFile" type="file" accept=".csv" style="display: none">
+</div>
+
+<div id="etiquetteTemplate" hidden>
+  <div class="etiquetteContainer">
+    <div class="poContainer"></div>
+    <div class="partNoContainer"></div>
+    <div class="qrCodeContainer"></div>
+    <div class="titleContainer" contenteditable="true"></div>
+    <div class="noPrint etiquetteControls">
+      <button class="btnDelete">❌</button>
+      <button class="btnDecreaseFontSize">A↓</button>
+      <button class="btnIncreaseFontSize">A↑</button>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+'use strict';
+
+const MAX_ETIQUETTE_PER_PAGE = 110;
+const FONT_SIZE_MAX = 24;
+const FONT_SIZE_MIN = 6;
+
+function newPage() {
+  const  page = document.createElement('DIV');
+  page.classList.add('page');
+  document.body.appendChild(page);
+  return page;
+}
+
+function newEtiquette(partNo, partTitle, poNumber, eType) {
+  if (isNaN(poNumber)) {
+    poNumber = 0;
+  }
+
+  // Construct HTML elements
+  let template = document.getElementById('etiquetteTemplate');
+  let etiquette = template.firstElementChild.cloneNode(true);
+  etiquette.classList.add('etiquetteType' + eType);
+
+  // Fill Elements
+  let qrCodeContainer = etiquette.getElementsByClassName('qrCodeContainer')[0];
+  let titleContainer = etiquette.getElementsByClassName('titleContainer')[0];
+  let poContainer = etiquette.getElementsByClassName('poContainer')[0];
+  let partNoContainer = etiquette.getElementsByClassName('partNoContainer')[0];
+  let deleteButton = etiquette.getElementsByClassName('btnDelete')[0];
+  let incFontButton = etiquette.getElementsByClassName('btnIncreaseFontSize')[0];
+  let decFontButton = etiquette.getElementsByClassName('btnDecreaseFontSize')[0];
+
+  generateQrCode(qrCodeContainer, partNo, poNumber);
+  titleContainer.innerText = partTitle;
+  if (poNumber != 0) {
+    if (poNumber < 10000) {
+      poContainer.innerText = 
+         "PO" + (100000 + poNumber).toString().substr(1);
+    } else {
+	    poContainer.innerText = "PO" + poNumber;
+    }
+  }
+  partNoContainer.innerText = 
+       "P" + (100000 + partNo).toString().substr(1);
+  deleteButton.addEventListener('click', () => deleteEtiquette(etiquette));
+  incFontButton.addEventListener('click', () => etiquetteIncreaseFont(etiquette));
+  decFontButton.addEventListener('click', () => etiquetteDecreaseFont(etiquette));
+
+  // Get target page
+  const pages = document.getElementsByClassName('page');
+  let page = pages[pages.length - 1];
+  page.appendChild(etiquette);
+  if (page.scrollHeight > page.clientHeight) {
+    page.removeChild(etiquette);
+    page = newPage();
+    page.appendChild(etiquette);
+  }
+
+  // Resize title to fit
+  for (let i=FONT_SIZE_MAX; i >= FONT_SIZE_MIN; i--) {
+    titleContainer.style.fontSize = i + "px";
+    if (titleContainer.scrollHeight <= titleContainer.clientHeight) break;
+  }
+
+}
+  
+function deleteEtiquette(etiquette) {
+  let page = etiquette.parentElement;
+  page.removeChild(etiquette);
+}
+
+function etiquetteIncreaseFont(etiquette) {
+  let titleContainer = etiquette.getElementsByClassName('titleContainer')[0];
+  titleContainer.style.fontSize = (parseInt(titleContainer.style.fontSize) + 1) + "px";
+}
+
+function etiquetteDecreaseFont(etiquette) {
+  let titleContainer = etiquette.getElementsByClassName('titleContainer')[0];
+  titleContainer.style.fontSize = (parseInt(titleContainer.style.fontSize) - 1) + "px";
+}
+
+function generateQrCode(el, partId, poNumber) {
+  let code = "661" +
+    (100000 + partId).toString().substr(1) +
+    (100000000 + poNumber).toString().substr(1);
+  // TODO: append checksum
+
+  // calculate checksum
+  let checksum = 0;
+  for (let i = 0; i < code.length; i++) {
+    const chr = code.charCodeAt(i);
+    checksum = checksum + chr;
+  }
+  checksum = checksum % 10;
+  code = code + checksum;
+
+  console.log("qr code: " + code);
+
+  const typeNumber = 0;
+  const errorCorrectionLevel = 'L';
+  const qr = qrcode(typeNumber, errorCorrectionLevel);
+  qr.addData(code, 'Numeric');
+  qr.make();
+  el.innerHTML = qr.createImgTag(3, 2);
+}
+
+function handleImportCsv(evt) {
+  Papa.parse(document.getElementById('inpCsvFile').files[0], {
+    complete: function(results, file) {
+      // TODO: determine column assignment from column header
+      const colIdxPartNo = 0;
+      const colIdxPartTitle = 2;
+      const colIdxPoNumber = null;
+      const colIdxEtiquetteType = 3;
+
+
+      const eTypes = [];
+      for (let option of document.getElementById('selEtiquetteType').options) {
+        eTypes.push(option.value);
+      }
+
+
+      for (let j = 0; j < eTypes.length; j++) {
+        for (let i = 1; i < results.data.length; i++) {
+          const row = results.data[i];
+
+          let partNo = row[colIdxPartNo];
+          let partTitle = row[colIdxPartTitle];
+          let poNumber = '';
+          let etiquetteType = parseInt(row[colIdxEtiquetteType]) - 1;
+
+          try {
+            partNo = parseInt(partNo.substr(1));
+
+            if (etiquetteType == j && partTitle != '') {
+              newEtiquette(partNo, partTitle, 0, eTypes[etiquetteType]);
+            }
+          } catch (e) {
+            console.exception(e);
+          }
+        }
+      }
+    },
+    error: function(error, file) {
+      alert(`Failed parsing ${file}: ${error}`);
+    }
+  })
+}
+
+newPage();
+
+document.getElementById('frmAddLabel').addEventListener('submit', (evt) => {
+  evt.preventDefault();
+  let form = evt.target;
+  newEtiquette(
+    parseInt(form["inpPartNo"].value),
+    form["inpPartTitle"].value,
+    parseInt(form["inpPoNumber"].value),
+    form["selEtiquetteType"].value);
+
+  form["inpPartNo"].focus();
+  form["inpPartNo"].select();
+});
+
+document.getElementById("btnImport").addEventListener("click",
+    () => document.getElementById('inpCsvFile').click());
+document.getElementById("inpCsvFile").addEventListener("change", handleImportCsv);
+</script>
+</body>
+</html>
